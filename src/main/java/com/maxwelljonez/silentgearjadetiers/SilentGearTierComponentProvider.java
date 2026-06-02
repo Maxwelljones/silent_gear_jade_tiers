@@ -33,9 +33,9 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
     private record Tier(
             ResourceLocation materialId,
             TagKey<Block> incorrectTag,
+            String tierName,
             String levelHint,
             double sortLevel,
-            String name,
             int color,
             boolean preferredNameForTag
     ) {
@@ -198,62 +198,63 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
         return tiers;
     }
 
-    private static Tier tierFromMaterial(ResourceLocation materialId, Material material) {
+        private static Tier tierFromMaterial(ResourceLocation materialId, Material material) {
         try {
             MaterialInstance instance = MaterialInstance.of(material);
 
             HarvestTier harvestTier = instance.getProperty(
-                    PartTypes.MAIN.get(),
-                    GearProperties.HARVEST_TIER.get()
+                PartTypes.MAIN.get(),
+                GearProperties.HARVEST_TIER.get()
             );
 
             if (harvestTier == null) {
                 return null;
             }
-
+    
             TagKey<Block> incorrectTag = harvestTier.incorrectForTool();
+
             if (incorrectTag == null) {
                 return null;
             }
 
-            ResourceLocation tagId = incorrectTag.location();
+            ResourceLocation tagLocation = incorrectTag.location();
 
-            // This addon targets Silent Gear's material-defined progression tags.
-            // It intentionally avoids vanilla minecraft:incorrect_for_* tags because those
-            // are not enough to express custom Silent Gear material progression.
-            if (!"silentgear".equals(tagId.getNamespace())) {
+            if (!"silentgear".equals(tagLocation.getNamespace())) {
                 return null;
             }
 
-            if (!tagId.getPath().startsWith("incorrect_for_") || !tagId.getPath().endsWith("_tools")) {
+            if (!tagLocation.getPath().startsWith("incorrect_for_")
+                || !tagLocation.getPath().endsWith("_tools")) {
                 return null;
             }
 
             String levelHint = harvestTier.levelHint().orElse("").trim();
-            if (levelHint.isEmpty()) {
+
+            if (levelHint.isBlank()) {
                 return null;
             }
 
-            String materialName = instance.getSimpleName().getString();
-            if (materialName == null || materialName.isBlank()) {
-                materialName = prettifyMaterialId(materialId);
+            String tierName = harvestTier.name().trim();
+
+            if (tierName.isBlank()) {
+                tierName = expectedMaterialPathFromTag(tagLocation);
             }
 
             int color = safeMaterialColor(instance);
 
-            String expectedMaterialPath = expectedMaterialPathFromTag(tagId);
-            boolean preferred = materialId.getPath().equals(expectedMaterialPath);
+            String expectedName = expectedMaterialPathFromTag(tagLocation);
+            boolean preferredNameForTag = tierName.equals(expectedName);
 
             return new Tier(
-                    materialId,
-                    incorrectTag,
-                    levelHint,
-                    parseLevelHint(levelHint),
-                    materialName,
-                    color,
-                    preferred
+                materialId,
+                incorrectTag,
+                tierName,
+                levelHint,
+                parseLevelHint(levelHint),
+                color,
+                preferredNameForTag
             );
-        } catch (Exception ignored) {
+        } catch (Exception e) {
             return null;
         }
     }
