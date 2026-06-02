@@ -1,4 +1,4 @@
-name: Build KidZ Jade Tiers Addon
+name: Build Jade Tiers Addon for Silentgear
 
 on:
   workflow_dispatch:
@@ -67,6 +67,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: kidz-jade-tiers-addon
+          name: jade-tiers-addon-for-silentgear
           path: artifacts/*.jar
           if-no-files-found: error
