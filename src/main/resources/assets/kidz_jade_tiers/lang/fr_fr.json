@@ -1,4 +1,3 @@
 {
-  "config.jade.plugin_kidz_jade_tiers.required_tier": "Tier de minage",
-  "kidz_jade_tiers.required": "Requis : %s"
+  "config.jade.plugin_silentgear_jade_tiers.required_tier": "Tier Silent Gear requis"
 }
