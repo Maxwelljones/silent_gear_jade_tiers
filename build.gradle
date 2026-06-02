@@ -19,6 +19,21 @@ java {
     withSourcesJar()
 }
 
+repositories {
+    maven {
+        name = 'NeoForged'
+        url = uri('https://maven.neoforged.net/releases')
+    }
+    maven {
+        name = 'CurseMaven'
+        url = uri('https://cursemaven.com')
+        content {
+            includeGroup 'curse.maven'
+        }
+    }
+    mavenCentral()
+}
+
 dependencies {
     implementation "net.neoforged:neoforge:${neoforge_version}"
 
