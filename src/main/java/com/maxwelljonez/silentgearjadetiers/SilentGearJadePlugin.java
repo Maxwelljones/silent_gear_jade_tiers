@@ -14,14 +14,12 @@ public final class SilentGearJadePlugin implements IWailaPlugin {
 
     @Override
     public void register(IWailaCommonRegistration registration) {
-        // No server data needed for the current implementation.
-        // We read client-known block tags.
+        // No custom server payload is needed.
+        // Silent Gear material data and block tags are already available through normal game/runtime data.
     }
 
     @Override
     public void registerClient(IWailaClientRegistration registration) {
-        // Register for all blocks. The provider stays silent unless the block belongs
-        // to the Silent Gear progression chain.
         registration.registerBlockComponent(SilentGearTierComponentProvider.INSTANCE, Block.class);
     }
 }
