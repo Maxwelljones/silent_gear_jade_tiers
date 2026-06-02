@@ -33,7 +33,7 @@ public final class SilentGearJadeTiersConfig {
 
         SHOW_TIER_NAME = builder
                 .comment("Show the Silent Gear material/tier name.")
-                .define("show_tier_name", true);
+                .define("show_tier_name", false);
 
         builder.pop();
 
