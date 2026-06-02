@@ -11,17 +11,6 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
-    repositories {
-        maven {
-            name = 'NeoForged'
-            url = uri('https://maven.neoforged.net/releases')
-        }
-        maven {
-            name = 'CurseMaven'
-            url = uri('https://cursemaven.com')
-        }
-        mavenCentral()
-    }
 }
 
-rootProject.name = 'kidz_jade_tiers_addon'
+rootProject.name = 'silent_gear_jade_tiers'
