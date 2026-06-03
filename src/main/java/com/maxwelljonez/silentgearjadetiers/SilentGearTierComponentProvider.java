@@ -4,17 +4,24 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.silentchaos512.gear.api.item.GearItem;
+import net.silentchaos512.gear.api.item.GearType;
 import net.silentchaos512.gear.api.material.Material;
+import net.silentchaos512.gear.api.part.PartType;
 import net.silentchaos512.gear.api.property.HarvestTier;
+import net.silentchaos512.gear.api.util.DataResource;
 import net.silentchaos512.gear.gear.material.MaterialInstance;
+import net.silentchaos512.gear.gear.part.PartInstance;
+import net.silentchaos512.gear.item.CompoundPartItem;
+import net.silentchaos512.gear.setup.GearItemSets;
+import net.silentchaos512.gear.setup.SgItems;
 import net.silentchaos512.gear.setup.SgRegistries;
 import net.silentchaos512.gear.setup.gear.GearProperties;
 import net.silentchaos512.gear.setup.gear.GearTypes;
 import net.silentchaos512.gear.setup.gear.PartTypes;
+import net.silentchaos512.gear.util.Const;
 import snownee.jade.api.BlockAccessor;
 import snownee.jade.api.IBlockComponentProvider;
 import snownee.jade.api.ITooltip;
@@ -22,63 +29,63 @@ import snownee.jade.api.config.IPluginConfig;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
     INSTANCE;
 
-private record Tier(
-        ResourceLocation materialId,
-        TagKey<Block> incorrectTag,
-        String tierName,
-        String levelHint,
-        double sortLevel,
-        int color,
-        boolean preferredNameForTag
-) {
-    String label() {
-        boolean showNumeric = SilentGearJadeTiersConfig.SHOW_NUMERIC_LEVEL.get();
-        boolean showName = SilentGearJadeTiersConfig.SHOW_TIER_NAME.get();
+    private static List<Tier> cachedRuntimeTierList;
 
-        String displayName = prettifyTierName(tierName);
+    private record Tier(
+            ResourceLocation materialId,
+            String tierName,
+            String levelHint,
+            double sortLevel,
+            int color,
+            ItemStack simulatedPickaxe
+    ) {
+        String label() {
+            boolean showNumeric = SilentGearJadeTiersConfig.SHOW_NUMERIC_LEVEL.get();
+            boolean showName = SilentGearJadeTiersConfig.SHOW_TIER_NAME.get();
 
-        if (showNumeric && showName) {
-            return "Tier " + formattedLevelHint() + " - " + displayName;
-        }
+            String displayName = prettifyTierName(tierName);
 
-        if (showNumeric) {
-            return "Tier " + formattedLevelHint();
-        }
-
-        if (showName) {
-            return displayName;
-        }
-
-        return "";
-    }
-
-    private String formattedLevelHint() {
-        try {
-            double value = Double.parseDouble(levelHint);
-
-            if (value == Math.rint(value)) {
-                int intValue = (int) value;
-
-                if (intValue >= 0 && intValue < 10) {
-                    return "0" + intValue;
-                }
-
-                return Integer.toString(intValue);
+            if (showNumeric && showName) {
+                return "Tier " + formattedLevelHint() + " - " + displayName;
             }
 
-            return levelHint;
-        } catch (NumberFormatException ignored) {
-            return levelHint;
+            if (showNumeric) {
+                return "Tier " + formattedLevelHint();
+            }
+
+            if (showName) {
+                return displayName;
+            }
+
+            return "";
+        }
+
+        private String formattedLevelHint() {
+            try {
+                double value = Double.parseDouble(levelHint);
+
+                if (value == Math.rint(value)) {
+                    int intValue = (int) value;
+
+                    if (intValue >= 0 && intValue < 10) {
+                        return "0" + intValue;
+                    }
+
+                    return Integer.toString(intValue);
+                }
+
+                return levelHint;
+            } catch (NumberFormatException ignored) {
+                return levelHint;
+            }
         }
     }
-}
 
     @Override
     public void appendTooltip(ITooltip tooltip, BlockAccessor accessor, IPluginConfig config) {
@@ -93,11 +100,13 @@ private record Tier(
         }
 
         List<Tier> tiers = buildRuntimeTierList();
-        if (tiers.size() < 2) {
+
+        if (tiers.isEmpty()) {
             return;
         }
 
         Tier required = findRequiredTier(state, tiers);
+
         if (required == null) {
             return;
         }
@@ -141,144 +150,172 @@ private record Tier(
     }
 
     private static Tier findRequiredTier(BlockState state, List<Tier> tiers) {
+        /*
+         * Real behavior check:
+         * We no longer infer from incorrect_for_* tags.
+         * We test real Silent Gear pickaxe ItemStacks built from runtime-loaded materials.
+         */
         if (!state.requiresCorrectToolForDrops()) {
             return null;
         }
-    
+
         for (Tier tier : tiers) {
-            if (simulatedSilentGearPickaxeCanMine(state, tier)) {
+            ItemStack simulatedPickaxe = tier.simulatedPickaxe();
+
+            if (!simulatedPickaxe.isEmpty() && simulatedPickaxe.isCorrectToolForDrops(state)) {
                 return tier;
             }
         }
-    
+
         return null;
-    }
-    
-    private static boolean simulatedSilentGearPickaxeCanMine(BlockState state, Tier tier) {
-        /*
-         * Silent Gear harvest tiers ultimately behave like:
-         *
-         * - this is a pickaxe-type block
-         * - and this block is NOT inside the tier's incorrect_for_<tier>_tools tag
-         *
-         * This uses live resolved block tags, not raw JSON files.
-         */
-        return state.is(net.minecraft.tags.BlockTags.MINEABLE_WITH_PICKAXE)
-                && !state.is(tier.incorrectTag());
     }
 
     private static List<Tier> buildRuntimeTierList() {
-        Map<ResourceLocation, Tier> tiersByIncorrectTag = new LinkedHashMap<>();
+        if (cachedRuntimeTierList != null) {
+            return cachedRuntimeTierList;
+        }
+
+        List<Tier> tiers = new ArrayList<>();
 
         for (Map.Entry<ResourceLocation, Material> entry : SgRegistries.MATERIAL.entrySet()) {
             ResourceLocation materialId = entry.getKey();
-            Material material = entry.getValue();
 
-            Tier tier = tierFromMaterial(materialId, material);
-            if (tier == null) {
-                continue;
-            }
+            Tier tier = tierFromMaterial(materialId);
 
-            ResourceLocation tagId = tier.incorrectTag().location();
-            Tier existing = tiersByIncorrectTag.get(tagId);
-
-            if (existing == null || shouldReplaceExistingTier(existing, tier)) {
-                tiersByIncorrectTag.put(tagId, tier);
+            if (tier != null) {
+                tiers.add(tier);
             }
         }
-
-        List<Tier> tiers = new ArrayList<>(tiersByIncorrectTag.values());
 
         tiers.sort(
                 Comparator.comparingDouble(Tier::sortLevel)
                         .thenComparing(tier -> tier.materialId().toString())
         );
 
-        return tiers;
+        cachedRuntimeTierList = List.copyOf(tiers);
+        return cachedRuntimeTierList;
     }
 
-    private static Tier tierFromMaterial(ResourceLocation materialId, Material material) {
+    private static Tier tierFromMaterial(ResourceLocation materialId) {
         try {
-            MaterialInstance instance = MaterialInstance.of(material);
-    
-            HarvestTier harvestTier = instance.getProperty(
+            MaterialInstance materialInstance = MaterialInstance.of(DataResource.material(materialId));
+
+            if (!materialInstance.isValid()) {
+                return null;
+            }
+
+            GearType pickaxeType = GearTypes.PICKAXE.get();
+
+            if (!materialInstance.isCraftingAllowed(PartTypes.MAIN.get(), pickaxeType)) {
+                return null;
+            }
+
+            HarvestTier harvestTier = materialInstance.getProperty(
                     PartTypes.MAIN.get(),
                     GearProperties.HARVEST_TIER.get()
             );
-    
+
             if (harvestTier == null) {
                 return null;
             }
-    
-            TagKey<Block> incorrectTag = harvestTier.incorrectForTool();
-    
-            if (incorrectTag == null) {
-                return null;
-            }
-    
-            ResourceLocation tagLocation = incorrectTag.location();
-    
-            if (!"silentgear".equals(tagLocation.getNamespace())) {
-                return null;
-            }
-    
-            String tagPath = tagLocation.getPath();
-    
-            if (!tagPath.startsWith("incorrect_for_") || !tagPath.endsWith("_tools")) {
-                return null;
-            }
-    
-            String expectedTierName = expectedMaterialPathFromTag(tagLocation);
-    
-            String tierName = harvestTier.name();
-    
-            if (tierName == null || tierName.isBlank()) {
-                tierName = expectedTierName;
-            }
-    
-            tierName = tierName.trim();
-    
-            if (!tierName.equals(expectedTierName)) {
-                return null;
-            }
-    
+
             String levelHint = harvestTier.levelHint().orElse("").trim();
-    
+
             if (levelHint.isBlank()) {
                 return null;
             }
-    
-            int color = safeMaterialColor(instance);
+
+            String tierName = harvestTier.name();
+
+            if (tierName == null || tierName.isBlank()) {
+                tierName = materialId.getPath();
+            }
+
+            tierName = tierName.trim();
+
+            ItemStack simulatedPickaxe = createSimulatedPickaxe(materialId);
+
+            if (simulatedPickaxe.isEmpty()) {
+                return null;
+            }
+
+            int color = safeMaterialColor(materialInstance);
 
             return new Tier(
                     materialId,
-                    incorrectTag,
                     tierName,
                     levelHint,
                     parseLevelHint(levelHint),
                     color,
-                    true
+                    simulatedPickaxe
             );
         } catch (Exception ignored) {
             return null;
         }
     }
-    private static boolean shouldReplaceExistingTier(Tier existing, Tier candidate) {
-        if (candidate.preferredNameForTag() && !existing.preferredNameForTag()) {
-            return true;
-        }
 
-        if (!candidate.preferredNameForTag() && existing.preferredNameForTag()) {
-            return false;
-        }
+    private static ItemStack createSimulatedPickaxe(ResourceLocation mainMaterialId) {
+        try {
+            GearItem gearItem = GearItemSets.PICKAXE.gearItem();
+            List<PartInstance> parts = new ArrayList<>();
 
-        // Prefer same namespace as the tag if possible.
-        if ("silentgear".equals(candidate.materialId().getNamespace())
-                && !"silentgear".equals(existing.materialId().getNamespace())) {
-            return true;
-        }
+            MaterialInstance mainMaterial = MaterialInstance.of(DataResource.material(mainMaterialId));
 
-        return candidate.materialId().toString().compareTo(existing.materialId().toString()) < 0;
+            parts.add(PartInstance.from(
+                    GearItemSets.PICKAXE.mainPart().create(mainMaterial)
+            ));
+
+            addRequiredPart(
+                    parts,
+                    gearItem,
+                    PartTypes.ROD.get(),
+                    SgItems.ROD.get(),
+                    MaterialInstance.of(Const.Materials.WOOD)
+            );
+
+            addRequiredPart(
+                    parts,
+                    gearItem,
+                    PartTypes.CORD.get(),
+                    SgItems.CORD.get(),
+                    MaterialInstance.of(Const.Materials.STRING)
+            );
+
+            addRequiredPart(
+                    parts,
+                    gearItem,
+                    PartTypes.BINDING.get(),
+                    SgItems.BINDING.get(),
+                    MaterialInstance.of(Const.Materials.STRING)
+            );
+
+            addRequiredPart(
+                    parts,
+                    gearItem,
+                    PartTypes.SETTING.get(),
+                    SgItems.SETTING.get(),
+                    MaterialInstance.of(Const.Materials.DIAMOND)
+            );
+
+            ItemStack stack = gearItem.construct(parts);
+            stack.setCount(1);
+
+            return stack;
+        } catch (Exception ignored) {
+            return ItemStack.EMPTY;
+        }
+    }
+
+    private static void addRequiredPart(
+            List<PartInstance> parts,
+            GearItem gearItem,
+            PartType partType,
+            CompoundPartItem partItem,
+            MaterialInstance material
+    ) {
+        if (gearItem.requiresPartOfType(partType)) {
+            parts.add(PartInstance.from(partItem.create(material)));
+        }
     }
 
     private static int safeMaterialColor(MaterialInstance instance) {
@@ -297,49 +334,34 @@ private record Tier(
         }
     }
 
-    private static String expectedMaterialPathFromTag(ResourceLocation tagId) {
-        String path = tagId.getPath();
-
-        if (path.startsWith("incorrect_for_")) {
-            path = path.substring("incorrect_for_".length());
-        }
-
-        if (path.endsWith("_tools")) {
-            path = path.substring(0, path.length() - "_tools".length());
-        }
-
-        return path;
-    }
-
     private static String prettifyTierName(String tierName) {
-    if (tierName == null || tierName.isBlank()) {
-        return "";
+        if (tierName == null || tierName.isBlank()) {
+            return "";
+        }
+
+        String path = tierName.trim().replace('_', ' ');
+        String[] words = path.split(" ");
+
+        StringBuilder result = new StringBuilder();
+
+        for (String word : words) {
+            if (word.isBlank()) {
+                continue;
+            }
+
+            if (!result.isEmpty()) {
+                result.append(' ');
+            }
+
+            result.append(Character.toUpperCase(word.charAt(0)));
+
+            if (word.length() > 1) {
+                result.append(word.substring(1));
+            }
+        }
+
+        return result.isEmpty() ? tierName : result.toString();
     }
-
-    String path = tierName.trim().replace('_', ' ');
-    String[] words = path.split(" ");
-
-    StringBuilder result = new StringBuilder();
-
-    for (String word : words) {
-        if (word.isBlank()) {
-            continue;
-        }
-
-        if (!result.isEmpty()) {
-            result.append(' ');
-        }
-
-        result.append(Character.toUpperCase(word.charAt(0)));
-
-        if (word.length() > 1) {
-            result.append(word.substring(1));
-        }
-    }
-
-    return result.isEmpty() ? tierName : result.toString();
-}
-
 
     @Override
     public ResourceLocation getUid() {
