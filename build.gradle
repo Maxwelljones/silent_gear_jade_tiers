@@ -76,6 +76,6 @@ tasks.named('processResources', ProcessResources).configure {
 
 tasks.named('jar', Jar).configure {
     archiveBaseName = mod_id
-    archiveVersion = mod_version
+    archiveVersion = "${mod_version}-${minecraft_version}"
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
