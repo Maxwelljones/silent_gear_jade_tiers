@@ -30,46 +30,56 @@ import java.util.Map;
 public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
     INSTANCE;
 
-    private record Tier(
-            ResourceLocation materialId,
-            TagKey<Block> incorrectTag,
-            String tierName,
-            String levelHint,
-            double sortLevel,
-            int color,
-            boolean preferredNameForTag
-    ) {
-        String label() {
-            boolean showNumeric = SilentGearJadeTiersConfig.SHOW_NUMERIC_LEVEL.get();
-            boolean showName = SilentGearJadeTiersConfig.SHOW_TIER_NAME.get();
+private record Tier(
+        ResourceLocation materialId,
+        TagKey<Block> incorrectTag,
+        String tierName,
+        String levelHint,
+        double sortLevel,
+        int color,
+        boolean preferredNameForTag
+) {
+    String label() {
+        boolean showNumeric = SilentGearJadeTiersConfig.SHOW_NUMERIC_LEVEL.get();
+        boolean showName = SilentGearJadeTiersConfig.SHOW_TIER_NAME.get();
 
-            if (showNumeric && showName) {
-                return "Tier " + formattedLevelHint() + " - " + name;
-            }
+        String displayName = prettifyTierName(tierName);
 
-            if (showNumeric) {
-                return "Tier " + formattedLevelHint();
-            }
-
-            if (showName) {
-                return name;
-            }
-
-            return "";
+        if (showNumeric && showName) {
+            return "Tier " + formattedLevelHint() + " - " + displayName;
         }
 
-        private String formattedLevelHint() {
-            try {
-                int value = Integer.parseInt(levelHint);
-                if (value >= 0 && value < 10) {
-                    return "0" + value;
+        if (showNumeric) {
+            return "Tier " + formattedLevelHint();
+        }
+
+        if (showName) {
+            return displayName;
+        }
+
+        return "";
+    }
+
+    private String formattedLevelHint() {
+        try {
+            double value = Double.parseDouble(levelHint);
+
+            if (value == Math.rint(value)) {
+                int intValue = (int) value;
+
+                if (intValue >= 0 && intValue < 10) {
+                    return "0" + intValue;
                 }
-                return Integer.toString(value);
-            } catch (NumberFormatException ignored) {
-                return levelHint;
+
+                return Integer.toString(intValue);
             }
+
+            return levelHint;
+        } catch (NumberFormatException ignored) {
+            return levelHint;
         }
     }
+}
 
     @Override
     public void appendTooltip(ITooltip tooltip, BlockAccessor accessor, IPluginConfig config) {
