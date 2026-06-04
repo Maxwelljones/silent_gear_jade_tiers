@@ -1,11 +1,18 @@
 package com.maxwelljonez.silentgearjadetiers;
 
+import com.mojang.logging.LogUtils;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.Tool;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec2;
 import net.silentchaos512.gear.api.item.GearItem;
 import net.silentchaos512.gear.api.item.GearType;
 import net.silentchaos512.gear.api.material.Material;
@@ -22,20 +29,40 @@ import net.silentchaos512.gear.setup.gear.GearProperties;
 import net.silentchaos512.gear.setup.gear.GearTypes;
 import net.silentchaos512.gear.setup.gear.PartTypes;
 import net.silentchaos512.gear.util.Const;
+import org.slf4j.Logger;
 import snownee.jade.api.BlockAccessor;
 import snownee.jade.api.IBlockComponentProvider;
 import snownee.jade.api.ITooltip;
 import snownee.jade.api.config.IPluginConfig;
+import snownee.jade.api.ui.IElement;
+import snownee.jade.api.ui.IElementHelper;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
     INSTANCE;
 
-    private static List<Tier> cachedRuntimeTierList;
+    private static final Logger LOGGER = LogUtils.getLogger();
+
+    /*
+     * Temporary debug logging.
+     * Keep this true for the next test.
+     * After we confirm the logic, set it to false.
+     */
+    private static final boolean DEBUG_LOGGING = true;
+
+    private static final ResourceLocation PICKAXE_CROSS_TEXTURE = ResourceLocation.fromNamespaceAndPath(
+            "silentgear_jade_tiers",
+            "textures/gui/generic_pickaxe_cross.png"
+    );
+
+    private static final Set<ResourceLocation> DEBUGGED_BLOCKS = new HashSet<>();
+    private static boolean loggedTierList = false;
 
     private record Tier(
             ResourceLocation materialId,
@@ -87,6 +114,9 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
         }
     }
 
+    private record ToolCheckResult(boolean allowed, String reason) {
+    }
+
     @Override
     public void appendTooltip(ITooltip tooltip, BlockAccessor accessor, IPluginConfig config) {
         if (!SilentGearJadeTiersConfig.SHOW_REQUIRED_TIER.get()) {
@@ -111,20 +141,27 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
             return;
         }
 
-        MutableComponent line = Component.empty();
-
-        if (SilentGearJadeTiersConfig.SHOW_CROSSED_PICKAXE_ICON.get()) {
-            line.append(Component.literal("⛏").withStyle(style -> style.withColor(required.color())));
-            line.append(Component.literal(" ✕ ").withStyle(ChatFormatting.RED));
-        }
-
-        line.append(Component.literal("Required: ").withStyle(ChatFormatting.GRAY));
+        MutableComponent text = Component.empty()
+                .append(Component.literal("Required: ").withStyle(ChatFormatting.GRAY));
 
         String label = required.label();
 
         if (!label.isBlank()) {
-            line.append(Component.literal(label).withStyle(style -> style.withColor(required.color())));
+            text.append(Component.literal(label).withStyle(style -> style.withColor(required.color())));
         }
+
+        List<IElement> line = new ArrayList<>();
+
+        if (SilentGearJadeTiersConfig.SHOW_CROSSED_PICKAXE_ICON.get()) {
+            line.add(
+                    IElementHelper.get()
+                            .sprite(PICKAXE_CROSS_TEXTURE, 10, 10)
+                            .size(new Vec2(10, 10))
+                            .message(null)
+            );
+        }
+
+        line.add(IElementHelper.get().text(text).message(null));
 
         tooltip.add(line);
     }
@@ -150,31 +187,89 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
     }
 
     private static Tier findRequiredTier(BlockState state, List<Tier> tiers) {
-        /*
-         * Real behavior check:
-         * We no longer infer from incorrect_for_* tags.
-         * We test real Silent Gear pickaxe ItemStacks built from runtime-loaded materials.
-         */
         if (!state.requiresCorrectToolForDrops()) {
             return null;
         }
 
-        for (Tier tier : tiers) {
-            ItemStack simulatedPickaxe = tier.simulatedPickaxe();
+        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        boolean debugThisBlock = DEBUG_LOGGING && DEBUGGED_BLOCKS.add(blockId);
 
-            if (!simulatedPickaxe.isEmpty() && simulatedPickaxe.isCorrectToolForDrops(state)) {
+        if (debugThisBlock) {
+            LOGGER.info("[SGJT] Testing required Silent Gear tier for block {}", blockId);
+        }
+
+        for (Tier tier : tiers) {
+            ToolCheckResult result = toolComponentAllowsDrops(tier.simulatedPickaxe(), state);
+
+            if (debugThisBlock) {
+                LOGGER.info(
+                        "[SGJT]   tier={} level={} material={} allowed={} reason={} tool={}",
+                        tier.tierName(),
+                        tier.levelHint(),
+                        tier.materialId(),
+                        result.allowed(),
+                        result.reason(),
+                        tier.simulatedPickaxe().getHoverName().getString()
+                );
+            }
+
+            if (result.allowed()) {
+                if (debugThisBlock) {
+                    LOGGER.info(
+                            "[SGJT]   RESULT block={} requiredTier={} level={}",
+                            blockId,
+                            tier.tierName(),
+                            tier.levelHint()
+                    );
+                }
+
                 return tier;
             }
+        }
+
+        if (debugThisBlock) {
+            LOGGER.info("[SGJT]   RESULT block={} no matching Silent Gear tier found", blockId);
         }
 
         return null;
     }
 
-    private static List<Tier> buildRuntimeTierList() {
-        if (cachedRuntimeTierList != null) {
-            return cachedRuntimeTierList;
+    /*
+     * This mirrors Jade's harvest tool logic more closely than ItemStack.isCorrectToolForDrops.
+     *
+     * We intentionally inspect DataComponents.TOOL rules directly:
+     * - first matching deniesDrops rule => false
+     * - first matching minesAndDrops rule => true
+     *
+     * We do NOT fall back to ItemStack.isCorrectToolForDrops here, because that can hide
+     * whether Silent Gear's generated Tool component is actually correct.
+     */
+    private static ToolCheckResult toolComponentAllowsDrops(ItemStack stack, BlockState state) {
+        Tool tool = stack.get(DataComponents.TOOL);
+
+        if (tool == null) {
+            return new ToolCheckResult(false, "no_tool_component");
         }
 
+        int index = 0;
+
+        for (Tool.Rule rule : tool.rules()) {
+            if (rule.correctForDrops().isPresent() && state.is(rule.blocks())) {
+                boolean allowed = rule.correctForDrops().get();
+
+                return new ToolCheckResult(
+                        allowed,
+                        allowed ? "rule_" + index + "_allows_drops" : "rule_" + index + "_denies_drops"
+                );
+            }
+
+            index++;
+        }
+
+        return new ToolCheckResult(false, "no_matching_correct_for_drops_rule");
+    }
+
+    private static List<Tier> buildRuntimeTierList() {
         List<Tier> tiers = new ArrayList<>();
 
         for (Map.Entry<ResourceLocation, Material> entry : SgRegistries.MATERIAL.entrySet()) {
@@ -192,8 +287,28 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
                         .thenComparing(tier -> tier.materialId().toString())
         );
 
-        cachedRuntimeTierList = List.copyOf(tiers);
-        return cachedRuntimeTierList;
+        if (DEBUG_LOGGING && !loggedTierList) {
+            loggedTierList = true;
+
+            LOGGER.info("[SGJT] Runtime Silent Gear tier list: {} entries", tiers.size());
+
+            for (Tier tier : tiers) {
+                Tool tool = tier.simulatedPickaxe().get(DataComponents.TOOL);
+                int ruleCount = tool == null ? 0 : tool.rules().size();
+
+                LOGGER.info(
+                        "[SGJT]   loaded tier={} level={} material={} color={} toolComponent={} rules={}",
+                        tier.tierName(),
+                        tier.levelHint(),
+                        tier.materialId(),
+                        Integer.toHexString(tier.color()),
+                        tool != null,
+                        ruleCount
+                );
+            }
+        }
+
+        return tiers;
     }
 
     private static Tier tierFromMaterial(ResourceLocation materialId) {
@@ -219,6 +334,23 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
                 return null;
             }
 
+            TagKey<Block> incorrectTag = harvestTier.incorrectForTool();
+
+            if (incorrectTag == null) {
+                return null;
+            }
+
+            ResourceLocation incorrectTagId = incorrectTag.location();
+
+            if (!"silentgear".equals(incorrectTagId.getNamespace())) {
+                return null;
+            }
+
+            if (!incorrectTagId.getPath().startsWith("incorrect_for_")
+                    || !incorrectTagId.getPath().endsWith("_tools")) {
+                return null;
+            }
+
             String levelHint = harvestTier.levelHint().orElse("").trim();
 
             if (levelHint.isBlank()) {
@@ -239,6 +371,10 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
                 return null;
             }
 
+            if (simulatedPickaxe.get(DataComponents.TOOL) == null) {
+                return null;
+            }
+
             int color = safeMaterialColor(materialInstance);
 
             return new Tier(
@@ -249,7 +385,11 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
                     color,
                     simulatedPickaxe
             );
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            if (DEBUG_LOGGING) {
+                LOGGER.warn("[SGJT] Failed to create tier from material {}", materialId, e);
+            }
+
             return null;
         }
     }
@@ -301,7 +441,11 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
             stack.setCount(1);
 
             return stack;
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            if (DEBUG_LOGGING) {
+                LOGGER.warn("[SGJT] Failed to create simulated Silent Gear pickaxe for material {}", mainMaterialId, e);
+            }
+
             return ItemStack.EMPTY;
         }
     }
