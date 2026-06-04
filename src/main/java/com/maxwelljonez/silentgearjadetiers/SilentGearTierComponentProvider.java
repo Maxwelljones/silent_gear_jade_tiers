@@ -155,8 +155,8 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
         if (SilentGearJadeTiersConfig.SHOW_CROSSED_PICKAXE_ICON.get()) {
             line.add(
                     IElementHelper.get()
-                            .sprite(PICKAXE_CROSS_TEXTURE, 10, 10)
-                            .size(new Vec2(10, 10))
+                            .sprite(PICKAXE_CROSS_TEXTURE, 8, 8)
+                            .size(new Vec2(8, 8))
                             .message(null)
             );
         }
@@ -312,87 +312,106 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
     }
 
     private static Tier tierFromMaterial(ResourceLocation materialId) {
-        try {
-            MaterialInstance materialInstance = MaterialInstance.of(DataResource.material(materialId));
+    try {
+        MaterialInstance materialInstance = MaterialInstance.of(DataResource.material(materialId));
 
-            if (!materialInstance.isValid()) {
-                return null;
-            }
-
-            GearType pickaxeType = GearTypes.PICKAXE.get();
-
-            if (!materialInstance.isCraftingAllowed(PartTypes.MAIN.get(), pickaxeType)) {
-                return null;
-            }
-
-            HarvestTier harvestTier = materialInstance.getProperty(
-                    PartTypes.MAIN.get(),
-                    GearProperties.HARVEST_TIER.get()
-            );
-
-            if (harvestTier == null) {
-                return null;
-            }
-
-            TagKey<Block> incorrectTag = harvestTier.incorrectForTool();
-
-            if (incorrectTag == null) {
-                return null;
-            }
-
-            ResourceLocation incorrectTagId = incorrectTag.location();
-
-            if (!"silentgear".equals(incorrectTagId.getNamespace())) {
-                return null;
-            }
-
-            if (!incorrectTagId.getPath().startsWith("incorrect_for_")
-                    || !incorrectTagId.getPath().endsWith("_tools")) {
-                return null;
-            }
-
-            String levelHint = harvestTier.levelHint().orElse("").trim();
-
-            if (levelHint.isBlank()) {
-                return null;
-            }
-
-            String tierName = harvestTier.name();
-
-            if (tierName == null || tierName.isBlank()) {
-                tierName = materialId.getPath();
-            }
-
-            tierName = tierName.trim();
-
-            ItemStack simulatedPickaxe = createSimulatedPickaxe(materialId);
-
-            if (simulatedPickaxe.isEmpty()) {
-                return null;
-            }
-
-            if (simulatedPickaxe.get(DataComponents.TOOL) == null) {
-                return null;
-            }
-
-            int color = safeMaterialColor(materialInstance);
-
-            return new Tier(
-                    materialId,
-                    tierName,
-                    levelHint,
-                    parseLevelHint(levelHint),
-                    color,
-                    simulatedPickaxe
-            );
-        } catch (Exception e) {
-            if (DEBUG_LOGGING) {
-                LOGGER.warn("[SGJT] Failed to create tier from material {}", materialId, e);
-            }
-
+        if (!materialInstance.isValid()) {
             return null;
         }
+
+        GearType pickaxeType = GearTypes.PICKAXE.get();
+
+        if (!materialInstance.isCraftingAllowed(PartTypes.MAIN.get(), pickaxeType)) {
+            return null;
+        }
+
+        HarvestTier harvestTier = materialInstance.getProperty(
+                PartTypes.MAIN.get(),
+                GearProperties.HARVEST_TIER.get()
+        );
+
+        if (harvestTier == null) {
+            return null;
+        }
+
+        TagKey<Block> incorrectTag = harvestTier.incorrectForTool();
+
+        if (incorrectTag == null) {
+            return null;
+        }
+
+        ResourceLocation incorrectTagId = incorrectTag.location();
+
+        if (!"silentgear".equals(incorrectTagId.getNamespace())) {
+            return null;
+        }
+
+        String tagPath = incorrectTagId.getPath();
+
+        if (!tagPath.startsWith("incorrect_for_") || !tagPath.endsWith("_tools")) {
+            return null;
+        }
+
+        String expectedTierName = expectedTierNameFromIncorrectTag(incorrectTagId);
+        String tierName = harvestTier.name();
+
+        if (tierName == null || tierName.isBlank()) {
+            return null;
+        }
+
+        tierName = tierName.trim();
+
+        /*
+         * Critical filter:
+         * Only keep the actual progression material for a tier.
+         *
+         * This excludes Silent Gear side materials like:
+         * - basalt
+         * - blackstone
+         * - terracotta
+         * - amethyst
+         * - lapis_lazuli
+         *
+         * Those can have harvest tiers, but they are not our displayed progression tiers.
+         */
+        if (!normalizeTierKey(tierName).equals(expectedTierName)) {
+            return null;
+        }
+
+        String levelHint = harvestTier.levelHint().orElse("").trim();
+
+        if (levelHint.isBlank()) {
+            return null;
+        }
+
+        ItemStack simulatedPickaxe = createSimulatedPickaxe(materialId);
+
+        if (simulatedPickaxe.isEmpty()) {
+            return null;
+        }
+
+        if (simulatedPickaxe.get(DataComponents.TOOL) == null) {
+            return null;
+        }
+
+        int color = safeMaterialColor(materialInstance);
+
+        return new Tier(
+                materialId,
+                tierName,
+                levelHint,
+                parseLevelHint(levelHint),
+                color,
+                simulatedPickaxe
+        );
+    } catch (Exception e) {
+        if (DEBUG_LOGGING) {
+            LOGGER.warn("[SGJT] Failed to create tier from material {}", materialId, e);
+        }
+
+        return null;
     }
+}
 
     private static ItemStack createSimulatedPickaxe(ResourceLocation mainMaterialId) {
         try {
@@ -505,6 +524,32 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
         }
 
         return result.isEmpty() ? tierName : result.toString();
+    }
+
+        private static String expectedTierNameFromIncorrectTag(ResourceLocation tagId) {
+        String path = tagId.getPath();
+    
+        if (path.startsWith("incorrect_for_")) {
+            path = path.substring("incorrect_for_".length());
+        }
+    
+        if (path.endsWith("_tools")) {
+            path = path.substring(0, path.length() - "_tools".length());
+        }
+    
+        return normalizeTierKey(path);
+    }
+    
+    private static String normalizeTierKey(String value) {
+        if (value == null) {
+            return "";
+        }
+    
+        return value
+                .trim()
+                .toLowerCase(java.util.Locale.ROOT)
+                .replace(' ', '_')
+                .replace('-', '_');
     }
 
     @Override
