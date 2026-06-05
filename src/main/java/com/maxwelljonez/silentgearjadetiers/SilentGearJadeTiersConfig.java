@@ -17,7 +17,7 @@ public final class SilentGearJadeTiersConfig {
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
 
-        builder.push("display");
+        builder.push("display")
 
                 .comment(
                     "Silent Gear Jade Tiers reads live Silent Gear material data.",
@@ -26,7 +26,7 @@ public final class SilentGearJadeTiersConfig {
                     "- level_hint",
                     "- incorrect_blocks_for_tool",
                     "Non-progression materials with valid harvest tiers may also be detected if they can really mine a block."
-                )
+                );
         
         SHOW_REQUIRED_TIER = builder
                 .comment("Show the Silent Gear required mining tier line in Jade.")
