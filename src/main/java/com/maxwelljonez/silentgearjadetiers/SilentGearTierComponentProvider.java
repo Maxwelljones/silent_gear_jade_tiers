@@ -155,7 +155,7 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
         if (SilentGearJadeTiersConfig.SHOW_CROSSED_PICKAXE_ICON.get()) {
             line.add(
                     IElementHelper.get()
-                            .sprite(PICKAXE_CROSS_TEXTURE, 8, 8)
+                            .sprite(PICKAXE_CROSS_TEXTURE, 0, 0, 16, 16, 16, 16)
                             .size(new Vec2(8, 8))
                             .message(null)
             );
