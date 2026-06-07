@@ -573,7 +573,7 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
     }
     private static final class TierPickaxeElement extends Element {
     private static final int SOURCE_SIZE = 16;
-    private static final int DISPLAY_SIZE = 8;
+    private static final int DISPLAY_SIZE = 16;
 
     private final int color;
     private final boolean crossed;
@@ -589,48 +589,25 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
     }
 
     @Override
-    public void render(GuiGraphics guiGraphics, float x, float y, float maxX, float maxY) {
-        int drawX = Math.round(x);
-        int drawY = Math.round(y);
-        int width = Math.round(getCachedSize().x);
-        int height = Math.round(getCachedSize().y);
+public void render(GuiGraphics guiGraphics, float x, float y, float maxX, float maxY) {
+    int drawX = Math.round(x);
+    int drawY = Math.round(y);
+    int width = DISPLAY_SIZE;
+    int height = DISPLAY_SIZE;
 
-        float red = ((color >> 16) & 0xFF) / 255.0F;
-        float green = ((color >> 8) & 0xFF) / 255.0F;
-        float blue = (color & 0xFF) / 255.0F;
+    float red = ((color >> 16) & 0xFF) / 255.0F;
+    float green = ((color >> 8) & 0xFF) / 255.0F;
+    float blue = (color & 0xFF) / 255.0F;
 
-        RenderSystem.setShaderColor(red, green, blue, 1.0F);
+    RenderSystem.setShaderColor(red, green, blue, 1.0F);
+    guiGraphics.blitSprite(PICKAXE_TEXTURE, drawX, drawY, width, height);
 
-        IDisplayHelper.get().blitSprite(
-                guiGraphics,
-                PICKAXE_TEXTURE,
-                SOURCE_SIZE,
-                SOURCE_SIZE,
-                0,
-                0,
-                drawX,
-                drawY,
-                width,
-                height
-        );
+    RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
 
-        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-
-        if (crossed) {
-            IDisplayHelper.get().blitSprite(
-                    guiGraphics,
-                    PICKAXE_CROSS_TEXTURE,
-                    SOURCE_SIZE,
-                    SOURCE_SIZE,
-                    0,
-                    0,
-                    drawX,
-                    drawY,
-                    width,
-                    height
-            );
-        }
+    if (crossed) {
+        guiGraphics.blitSprite(PICKAXE_CROSS_TEXTURE, drawX, drawY, width, height);
     }
+}
 }
     
     @Override
