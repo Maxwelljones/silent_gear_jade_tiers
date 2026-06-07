@@ -52,7 +52,7 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
     private static final Logger LOGGER = LogUtils.getLogger();
 
     private static boolean debugLogging() {
-        return SilentGearJadeTiersConfig.debugLogging.get();
+        return SilentGearJadeTiersConfig.DEBUG_LOGGING.get();
     }
 
     private static final ResourceLocation PICKAXE_TEXTURE = ResourceLocation.fromNamespaceAndPath(
