@@ -2,7 +2,7 @@ package com.maxwelljonez.silentgearjadetiers;
 
 import com.mojang.logging.LogUtils;
 import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.ChatFormatting;
+import net.minecraft.ChatFormatting;f
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -38,6 +38,8 @@ import snownee.jade.api.ITooltip;
 import snownee.jade.api.config.IPluginConfig;
 import snownee.jade.api.ui.IElement;
 import snownee.jade.api.ui.IElementHelper;
+import snownee.jade.api.ui.Element;
+import snownee.jade.api.ui.IDisplayHelper;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -211,7 +213,7 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
         }
     
         ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
-        boolean debugThisBlock = DEBUG_LOGGING && DEBUGGED_BLOCKS.add(blockId);
+        boolean debugThisBlock = debugLogging && DEBUGGED_BLOCKS.add(blockId);
     
         if (debugThisBlock) {
             LOGGER.info("[SGJT] Testing required Silent Gear tier for block {}", blockId);
@@ -305,7 +307,7 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
                         .thenComparing(tier -> tier.materialId().toString())
         );
 
-        if (DEBUG_LOGGING && !loggedTierList) {
+        if (debugLogging && !loggedTierList) {
             loggedTierList = true;
 
             LOGGER.info("[SGJT] Runtime Silent Gear tier list: {} entries", tiers.size());
@@ -423,7 +425,7 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
                 simulatedPickaxe
         );
     } catch (Exception e) {
-        if (DEBUG_LOGGING) {
+        if (debugLogging) {
             LOGGER.warn("[SGJT] Failed to create tier from material {}", materialId, e);
         }
 
@@ -479,7 +481,7 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
 
             return stack;
         } catch (Exception e) {
-            if (DEBUG_LOGGING) {
+            if (debugLogging) {
                 LOGGER.warn("[SGJT] Failed to create simulated Silent Gear pickaxe for material {}", mainMaterialId, e);
             }
 
