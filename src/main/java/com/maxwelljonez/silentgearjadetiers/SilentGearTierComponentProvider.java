@@ -527,42 +527,48 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
         return result.isEmpty() ? tierName : result.toString();
     }
 
-private static final class TierPickaxeElement extends Element {
-    private static final int DISPLAY_SIZE = 8;
-    private static final int Y_OFFSET = 1;
-
-    private final int color;
-    private final boolean crossed;
-
-    private TierPickaxeElement(int color, boolean crossed) {
-        this.color = color & 0xFFFFFF;
-        this.crossed = crossed;
-    }
-
-    @Override
-    public Vec2 getSize() {
-        return new Vec2(DISPLAY_SIZE + 3, DISPLAY_SIZE);
-    }
-
-    @Override
-    public void render(GuiGraphics guiGraphics, float x, float y, float maxX, float maxY) {
-        int drawX = Math.round(x);
-        int drawY = Math.round(y) + Y_OFFSET;
-
-        float red = ((color >> 16) & 0xFF) / 255.0F;
-        float green = ((color >> 8) & 0xFF) / 255.0F;
-        float blue = (color & 0xFF) / 255.0F;
-
-        RenderSystem.setShaderColor(red, green, blue, 1.0F);
-        guiGraphics.blitSprite(PICKAXE_TEXTURE, drawX, drawY, DISPLAY_SIZE, DISPLAY_SIZE);
-
-        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-
-        if (crossed) {
-            guiGraphics.blitSprite(PICKAXE_CROSS_TEXTURE, drawX, drawY, DISPLAY_SIZE, DISPLAY_SIZE);
+    private static final class TierPickaxeElement extends Element {
+        private static final int DISPLAY_SIZE = 10;
+        private static final int Y_OFFSET = 1;
+        private static final float TINT_STRENGTH = 0.50F;
+    
+        private final int color;
+        private final boolean crossed;
+    
+        private TierPickaxeElement(int color, boolean crossed) {
+            this.color = color & 0xFFFFFF;
+            this.crossed = crossed;
+        }
+    
+        @Override
+        public Vec2 getSize() {
+            return new Vec2(DISPLAY_SIZE + 3, DISPLAY_SIZE);
+        }
+    
+        private static float blendWithWhite(int channel, float strength) {
+            float colorChannel = channel / 255.0F;
+            return 1.0F - ((1.0F - colorChannel) * strength);
+        }
+    
+        @Override
+        public void render(GuiGraphics guiGraphics, float x, float y, float maxX, float maxY) {
+            int drawX = Math.round(x);
+            int drawY = Math.round(y) + Y_OFFSET;
+    
+            float red = blendWithWhite((color >> 16) & 0xFF, TINT_STRENGTH);
+            float green = blendWithWhite((color >> 8) & 0xFF, TINT_STRENGTH);
+            float blue = blendWithWhite(color & 0xFF, TINT_STRENGTH);
+    
+            RenderSystem.setShaderColor(red, green, blue, 1.0F);
+            guiGraphics.blitSprite(PICKAXE_TEXTURE, drawX, drawY, DISPLAY_SIZE, DISPLAY_SIZE);
+    
+            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+    
+            if (crossed) {
+                guiGraphics.blitSprite(PICKAXE_CROSS_TEXTURE, drawX, drawY, DISPLAY_SIZE, DISPLAY_SIZE);
+            }
         }
     }
-}
     
     @Override
     public ResourceLocation getUid() {
