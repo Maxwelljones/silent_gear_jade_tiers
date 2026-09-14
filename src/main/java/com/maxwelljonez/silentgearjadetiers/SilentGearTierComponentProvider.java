@@ -181,62 +181,22 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
     }
 
     private static Tier findRequiredTier(BlockState state, List<Tier> tiers) {
-
-        List<Tier> tiers = buildRuntimeTierList();
-
-        if (tiers.isEmpty()) {
-            return;
-        }
-
-        Tier required = findRequiredTier(state, tiers);
-
-        if (required == null) {
-            return;
-        }
-
-        MutableComponent text = Component.empty()
-                .append(Component.literal("Required: ").withStyle(ChatFormatting.GRAY));
-
-        String label = required.label();
-
-        if (!label.isBlank()) {
-            text.append(Component.literal(label).withStyle(style -> style.withColor(required.color())));
-        }
-
-        List<IElement> line = new ArrayList<>();
-
-        if (SilentGearJadeTiersConfig.SHOW_CROSSED_PICKAXE_ICON.get()) {      
-            line.add(
-                    new TierPickaxeElement(
-                            required.color(),
-                            !heldCanMine
-                    ).message(null)
-            );
-        }
-    }
-
-    ItemStack held = accessor.getPlayer().getMainHandItem();
-
-    return jadeStyleCanHarvest(held, state).allowed();
-}
-
-    private static Tier findRequiredTier(BlockState state, List<Tier> tiers) {
         if (!state.requiresCorrectToolForDrops()) {
             return null;
         }
-    
+
         ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
         boolean debugThisBlock = debugLogging() && DEBUGGED_BLOCKS.add(blockId);
-    
+
         if (debugThisBlock) {
             LOGGER.info("[SGJT] Testing required Silent Gear tier for block {}", blockId);
         }
-    
+
         Tier bestTier = null;
-    
+
         for (Tier tier : tiers) {
             ToolCheckResult result = jadeStyleCanHarvest(tier.simulatedPickaxe(), state);
-    
+
             if (debugThisBlock) {
                 LOGGER.info(
                         "[SGJT]   tier={} level={} material={} allowed={} reason={} tool={}",
@@ -248,21 +208,22 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
                         tier.simulatedPickaxe().getHoverName().getString()
                 );
             }
-        if (bestTier == null && result.allowed()) {
-            bestTier = tier;
+
+            if (bestTier == null && result.allowed()) {
+                bestTier = tier;
             }
         }
-    
+
         if (debugThisBlock && bestTier != null) {
             LOGGER.info(
-                "[SGJT]   RESULT block={} requiredLevel={} winningMaterial={} winningTier={}",
-                blockId,
-                bestTier.levelHint(),
-                bestTier.materialId(),
-                bestTier.tierName()
+                    "[SGJT]   RESULT block={} requiredLevel={} winningMaterial={} winningTier={}",
+                    blockId,
+                    bestTier.levelHint(),
+                    bestTier.materialId(),
+                    bestTier.tierName()
             );
         }
-    
+
         return bestTier;
     }
 
@@ -272,36 +233,37 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
         if (tool != null) {
             int index = 0;
 
-        for (Tool.Rule rule : tool.rules()) {
-            if (rule.correctForDrops().isPresent() && state.is(rule.blocks())) {
-                boolean allowed = rule.correctForDrops().get();
+            for (Tool.Rule rule : tool.rules()) {
+                if (rule.correctForDrops().isPresent() && state.is(rule.blocks())) {
+                    boolean allowed = rule.correctForDrops().get();
 
-                return new ToolCheckResult(
-                        allowed,
-                        allowed ? "tool_rule_" + index + "_allows_drops" : "tool_rule_" + index + "_denies_drops"
-                );
+                    return new ToolCheckResult(
+                            allowed,
+                            allowed
+                                    ? "tool_rule_" + index + "_allows_drops"
+                                    : "tool_rule_" + index + "_denies_drops"
+                    );
+                }
+
+                index++;
             }
 
-            index++;
+            if (tool.getMiningSpeed(state) > tool.defaultMiningSpeed()) {
+                return new ToolCheckResult(true, "tool_component_mining_speed");
+            }
         }
 
-        if (tool.getMiningSpeed(state) > tool.defaultMiningSpeed()) {
-            return new ToolCheckResult(true, "tool_component_mining_speed");
+        if (stack.isCorrectToolForDrops(state)) {
+            return new ToolCheckResult(true, "stack_is_correct_tool_for_drops");
         }
-    }
 
-    if (stack.isCorrectToolForDrops(state)) {
-        return new ToolCheckResult(true, "stack_is_correct_tool_for_drops");
+        return new ToolCheckResult(false, "not_correct_tool");
     }
-
-    return new ToolCheckResult(false, "not_correct_tool");
-}
 
     private static List<Tier> buildRuntimeTierList() {
         List<Tier> tiers = new ArrayList<>();
 
         for (ResourceLocation materialId : SgRegistries.MATERIAL.keySet()) {
-
             Tier tier = tierFromMaterial(materialId);
 
             if (tier != null) {
@@ -339,82 +301,79 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
     }
 
     private static Tier tierFromMaterial(ResourceLocation materialId) {
-    try {
-        MaterialInstance materialInstance = MaterialInstance.of(DataResource.material(materialId));
+        try {
+            MaterialInstance materialInstance = MaterialInstance.of(DataResource.material(materialId));
 
-        if (!materialInstance.isValid()
-            || !materialInstance.isCraftingAllowed(
-                PartTypes.MAIN.get(),
-                GearTypes.PICKAXE.get()
-            )) {
-            return null;
-        }
+            if (!materialInstance.isValid()
+                    || !materialInstance.isCraftingAllowed(
+                            PartTypes.MAIN.get(),
+                            GearTypes.PICKAXE.get()
+                    )) {
+                return null;
+            }
 
-        HarvestTier harvestTier = materialInstance.getProperty(
-                PartTypes.MAIN.get(),
-                GearProperties.HARVEST_TIER.get()
-        );
-
-        if (harvestTier == null) {
-            return null;
-        }
-
-        var incorrectTag = harvestTier.incorrectForTool();
-
-        if (incorrectTag == null) {
-            return null;
-        }
-
-        ResourceLocation incorrectTagId = incorrectTag.location();
-        String tagPath = incorrectTagId.getPath();
-
-        if (!"silentgear".equals(incorrectTagId.getNamespace())
-                || !tagPath.startsWith("incorrect_for_")
-                || !tagPath.endsWith("_tools")) {
-            return null;
-        }
-
-        String tierName = harvestTier.name();
-        
-        tierName = (tierName == null || tierName.isBlank()
-                ? materialId.getPath()
-                : tierName).trim();
-
-        String levelHint = harvestTier.levelHint().orElse("").trim();
-
-        if (levelHint.isBlank()) {
-            return null;
-        }
-
-        if (simulatedPickaxe.isEmpty()
-                || simulatedPickaxe.get(DataComponents.TOOL) == null) {
-            return null;
-        }
-
-        if (simulatedPickaxe.get(DataComponents.TOOL) == null) {
-            return null;
-        }
-
-        return new Tier(
-                materialId,
-                tierName,
-                levelHint,
-                parseLevelHint(levelHint),
-                safeMaterialColor(materialInstance),
-                simulatedPickaxe
-        );
-    } catch (Exception e) {
-        if (debugLogging()) {
-            LOGGER.warn(
-                    "[SGJT] Tier creation failed: material={}, reason=invalid_crafting_allowed, exception={}",
-                    materialId,
-                    e.getMessage()
+            HarvestTier harvestTier = materialInstance.getProperty(
+                    PartTypes.MAIN.get(),
+                    GearProperties.HARVEST_TIER.get()
             );
-        }
 
-        return null;
+            if (harvestTier == null) {
+                return null;
+            }
+
+            var incorrectTag = harvestTier.incorrectForTool();
+
+            if (incorrectTag == null) {
+                return null;
+            }
+
+            ResourceLocation incorrectTagId = incorrectTag.location();
+            String tagPath = incorrectTagId.getPath();
+
+            if (!"silentgear".equals(incorrectTagId.getNamespace())
+                    || !tagPath.startsWith("incorrect_for_")
+                    || !tagPath.endsWith("_tools")) {
+                return null;
+            }
+
+            String tierName = harvestTier.name();
+            tierName = (tierName == null || tierName.isBlank()
+                    ? materialId.getPath()
+                    : tierName).trim();
+
+            String levelHint = harvestTier.levelHint().orElse("").trim();
+
+            if (levelHint.isBlank()) {
+                return null;
+            }
+
+            ItemStack simulatedPickaxe = createSimulatedPickaxe(materialId);
+
+            if (simulatedPickaxe.isEmpty()
+                    || simulatedPickaxe.get(DataComponents.TOOL) == null) {
+                return null;
+            }
+
+            return new Tier(
+                    materialId,
+                    tierName,
+                    levelHint,
+                    parseLevelHint(levelHint),
+                    safeMaterialColor(materialInstance),
+                    simulatedPickaxe
+            );
+        } catch (Exception e) {
+            if (debugLogging()) {
+                LOGGER.warn(
+                        "[SGJT] Tier creation failed: material={}, reason=invalid_crafting_allowed, exception={}",
+                        materialId,
+                        e.getMessage()
+                );
+            }
+
+            return null;
+        }
     }
-}
 
     private static ItemStack createSimulatedPickaxe(ResourceLocation mainMaterialId) {
         try {
