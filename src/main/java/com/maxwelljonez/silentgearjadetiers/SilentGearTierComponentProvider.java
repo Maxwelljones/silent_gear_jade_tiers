@@ -490,7 +490,7 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
 
     private static final class TierPickaxeElement extends Element {
         private static final int DISPLAY_SIZE = 9;
-        private static final int Y_OFFSET = -4;
+        private static final int Y_OFFSET = -1;
         private static final float TINT_STRENGTH = 0.50F;
 
         private final int color;
