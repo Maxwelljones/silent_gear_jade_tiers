@@ -8,16 +8,12 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.Tool;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.client.gui.GuiGraphics;
 import net.silentchaos512.gear.api.item.GearItem;
-import net.silentchaos512.gear.api.item.GearType;
-import net.silentchaos512.gear.api.material.Material;
 import net.silentchaos512.gear.api.part.PartType;
 import net.silentchaos512.gear.api.property.HarvestTier;
 import net.silentchaos512.gear.api.util.DataResource;
@@ -44,7 +40,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
@@ -130,8 +125,24 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
 
         BlockState state = accessor.getBlockState();
 
-        if (!shouldShowForHeldItem(accessor, state)) {
-            return;
+        var player = accessor.getPlayer();
+        ItemStack held = player == null ? ItemStack.EMPTY : player.getMainHandItem();
+        boolean heldCanMine = player != null
+            && !held.isEmpty()
+            && jadeStyleCanHarvest(held, state).allowed();
+        
+        if (player != null) {
+            if (held.isEmpty()) {
+                if (!SilentGearJadeTiersConfig.SHOW_IF_HOLDING_NO_TOOL.get()) {
+                    return;
+                }
+            } else if (heldCanMine) {
+                if (!SilentGearJadeTiersConfig.SHOW_IF_HOLDING_CORRECT_TOOL.get()) {
+                    return;
+                    }
+            } else if (!SilentGearJadeTiersConfig.SHOW_IF_HOLDING_WRONG_TOOL.get()) {
+                return;
+            }
         }
 
         List<Tier> tiers = buildRuntimeTierList();
@@ -157,9 +168,7 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
 
         List<IElement> line = new ArrayList<>();
 
-        if (SilentGearJadeTiersConfig.SHOW_CROSSED_PICKAXE_ICON.get()) {
-            boolean heldCanMine = heldItemCanMine(accessor, state);
-        
+        if (SilentGearJadeTiersConfig.SHOW_CROSSED_PICKAXE_ICON.get()) {      
             line.add(
                     new TierPickaxeElement(
                             required.color(),
@@ -167,34 +176,6 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
                     ).message(null)
             );
         }
-
-    line.add(IElementHelper.get().text(text).message(null));
-    
-    tooltip.add(line);
-    }
-
-    private static boolean shouldShowForHeldItem(BlockAccessor accessor, BlockState state) {
-        if (accessor.getPlayer() == null) {
-            return true;
-        }
-
-        ItemStack held = accessor.getPlayer().getMainHandItem();
-
-        if (held.isEmpty()) {
-            return SilentGearJadeTiersConfig.SHOW_IF_HOLDING_NO_TOOL.get();
-        }
-
-        boolean correctTool = jadeStyleCanHarvest(held, state).allowed();
-
-        if (correctTool) {
-            return SilentGearJadeTiersConfig.SHOW_IF_HOLDING_CORRECT_TOOL.get();
-        }
-
-        return SilentGearJadeTiersConfig.SHOW_IF_HOLDING_WRONG_TOOL.get();
-    }
-    private static boolean heldItemCanMine(BlockAccessor accessor, BlockState state) {
-    if (accessor.getPlayer() == null) {
-        return false;
     }
 
     ItemStack held = accessor.getPlayer().getMainHandItem();
@@ -218,7 +199,7 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
             LOGGER.info("[SGJT] Testing required Silent Gear tier for block {}", blockId);
         }
     
-        Tier best = null;
+        Tier bestTier = null;
     
         for (Tier tier : tiers) {
             ToolCheckResult result = jadeStyleCanHarvest(tier.simulatedPickaxe(), state);
@@ -234,34 +215,29 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
                         tier.simulatedPickaxe().getHoverName().getString()
                 );
             }
-    
-            if (!result.allowed()) {
-                continue;
-            }
-    
-            if (best == null || tier.sortLevel() < best.sortLevel()) {
-                best = tier;
+        if (bestTier == null && result.allowed()) {
+            bestTier = tier;
             }
         }
     
-        if (debugThisBlock && best != null) {
+        if (debugThisBlock && bestTier != null) {
             LOGGER.info(
-                    "[SGJT]   RESULT block={} requiredLevel={} winningMaterial={} winningTier={}",
-                    blockId,
-                    best.levelHint(),
-                    best.materialId(),
-                    best.tierName()
+                "[SGJT]   RESULT block={} requiredLevel={} winningMaterial={} winningTier={}",
+                blockId,
+                bestTier.levelHint(),
+                bestTier.materialId(),
+                bestTier.tierName()
             );
         }
     
-        return best;
+        return bestTier;
     }
 
     private static ToolCheckResult jadeStyleCanHarvest(ItemStack stack, BlockState state) {
-    Tool tool = stack.get(DataComponents.TOOL);
+        Tool tool = stack.get(DataComponents.TOOL);
 
-    if (tool != null) {
-        int index = 0;
+        if (tool != null) {
+            int index = 0;
 
         for (Tool.Rule rule : tool.rules()) {
             if (rule.correctForDrops().isPresent() && state.is(rule.blocks())) {
@@ -291,8 +267,7 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
     private static List<Tier> buildRuntimeTierList() {
         List<Tier> tiers = new ArrayList<>();
 
-        for (Map.Entry<ResourceLocation, Material> entry : SgRegistries.MATERIAL.entrySet()) {
-            ResourceLocation materialId = entry.getKey();
+        for (ResourceLocation materialId : SgRegistries.MATERIAL.keySet()) {
 
             Tier tier = tierFromMaterial(materialId);
 
@@ -334,13 +309,11 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
     try {
         MaterialInstance materialInstance = MaterialInstance.of(DataResource.material(materialId));
 
-        if (!materialInstance.isValid()) {
-            return null;
-        }
-
-        GearType pickaxeType = GearTypes.PICKAXE.get();
-
-        if (!materialInstance.isCraftingAllowed(PartTypes.MAIN.get(), pickaxeType)) {
+        if (!materialInstance.isValid()
+            || !materialInstance.isCraftingAllowed(
+                PartTypes.MAIN.get(),
+                GearTypes.PICKAXE.get()
+            )) {
             return null;
         }
 
@@ -353,31 +326,26 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
             return null;
         }
 
-        TagKey<Block> incorrectTag = harvestTier.incorrectForTool();
+        var incorrectTag = harvestTier.incorrectForTool();
 
         if (incorrectTag == null) {
             return null;
         }
 
         ResourceLocation incorrectTagId = incorrectTag.location();
-
-        if (!"silentgear".equals(incorrectTagId.getNamespace())) {
-            return null;
-        }
-
         String tagPath = incorrectTagId.getPath();
 
-        if (!tagPath.startsWith("incorrect_for_") || !tagPath.endsWith("_tools")) {
+        if (!"silentgear".equals(incorrectTagId.getNamespace())
+                || !tagPath.startsWith("incorrect_for_")
+                || !tagPath.endsWith("_tools")) {
             return null;
         }
 
         String tierName = harvestTier.name();
         
-        if (tierName == null || tierName.isBlank()) {
-            tierName = materialId.getPath();
-        }
-        
-        tierName = tierName.trim();
+        tierName = (tierName == null || tierName.isBlank()
+                ? materialId.getPath()
+                : tierName).trim();
 
         String levelHint = harvestTier.levelHint().orElse("").trim();
 
@@ -385,9 +353,8 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
             return null;
         }
 
-        ItemStack simulatedPickaxe = createSimulatedPickaxe(materialId);
-
-        if (simulatedPickaxe.isEmpty()) {
+        if (simulatedPickaxe.isEmpty()
+                || simulatedPickaxe.get(DataComponents.TOOL) == null) {
             return null;
         }
 
@@ -395,19 +362,21 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
             return null;
         }
 
-        int color = safeMaterialColor(materialInstance);
-
         return new Tier(
                 materialId,
                 tierName,
                 levelHint,
                 parseLevelHint(levelHint),
-                color,
+                safeMaterialColor(materialInstance),
                 simulatedPickaxe
         );
     } catch (Exception e) {
         if (debugLogging()) {
-            LOGGER.warn("[SGJT] Tier creation failed: material={}, reason=invalid_crafting_allowed, exception={}", materialId, e.getMessage());
+            LOGGER.warn(
+                    "[SGJT] Tier creation failed: material={}, reason=invalid_crafting_allowed, exception={}",
+                    materialId,
+                    e.getMessage()
+            );
         }
 
         return null;
@@ -531,45 +500,45 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
         private static final int DISPLAY_SIZE = 9;
         private static final int Y_OFFSET = 5;
         private static final float TINT_STRENGTH = 0.50F;
-    
+
         private final int color;
         private final boolean crossed;
-    
+
         private TierPickaxeElement(int color, boolean crossed) {
             this.color = color & 0xFFFFFF;
             this.crossed = crossed;
         }
-    
+
         @Override
         public Vec2 getSize() {
             return new Vec2(DISPLAY_SIZE + 3, DISPLAY_SIZE);
         }
-    
+
         private static float blendWithWhite(int channel, float strength) {
             float colorChannel = channel / 255.0F;
             return 1.0F - ((1.0F - colorChannel) * strength);
         }
-    
+
         @Override
         public void render(GuiGraphics guiGraphics, float x, float y, float maxX, float maxY) {
             int drawX = Math.round(x);
             int drawY = Math.round(y) + Y_OFFSET;
-    
+
             float red = blendWithWhite((color >> 16) & 0xFF, TINT_STRENGTH);
             float green = blendWithWhite((color >> 8) & 0xFF, TINT_STRENGTH);
             float blue = blendWithWhite(color & 0xFF, TINT_STRENGTH);
-    
+
             RenderSystem.setShaderColor(red, green, blue, 1.0F);
             guiGraphics.blitSprite(PICKAXE_TEXTURE, drawX, drawY, DISPLAY_SIZE, DISPLAY_SIZE);
-    
+
             RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-    
+
             if (crossed) {
                 guiGraphics.blitSprite(PICKAXE_CROSS_TEXTURE, drawX, drawY, DISPLAY_SIZE, DISPLAY_SIZE);
             }
         }
     }
-    
+
     @Override
     public ResourceLocation getUid() {
         return SilentGearJadePlugin.REQUIRED_TIER;
