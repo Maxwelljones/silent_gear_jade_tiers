@@ -407,7 +407,7 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
         );
     } catch (Exception e) {
         if (debugLogging()) {
-            LOGGER.warn("[SGJT] Failed to create tier from material {}", materialId, e);
+            LOGGER.warn("[SGJT] Tier creation failed: material={}, reason=invalid_crafting_allowed, exception={}", materialId, e.getMessage());
         }
 
         return null;
@@ -529,7 +529,7 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
 
     private static final class TierPickaxeElement extends Element {
         private static final int DISPLAY_SIZE = 9;
-        private static final int Y_OFFSET = 0;
+        private static final int Y_OFFSET = 5;
         private static final float TINT_STRENGTH = 0.50F;
     
         private final int color;
