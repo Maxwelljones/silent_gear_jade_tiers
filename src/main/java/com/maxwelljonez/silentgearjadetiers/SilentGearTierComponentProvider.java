@@ -124,13 +124,12 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
         }
 
         BlockState state = accessor.getBlockState();
-
         var player = accessor.getPlayer();
         ItemStack held = player == null ? ItemStack.EMPTY : player.getMainHandItem();
         boolean heldCanMine = player != null
-            && !held.isEmpty()
-            && jadeStyleCanHarvest(held, state).allowed();
-        
+                && !held.isEmpty()
+                && jadeStyleCanHarvest(held, state).allowed();
+
         if (player != null) {
             if (held.isEmpty()) {
                 if (!SilentGearJadeTiersConfig.SHOW_IF_HOLDING_NO_TOOL.get()) {
@@ -139,11 +138,49 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
             } else if (heldCanMine) {
                 if (!SilentGearJadeTiersConfig.SHOW_IF_HOLDING_CORRECT_TOOL.get()) {
                     return;
-                    }
+                }
             } else if (!SilentGearJadeTiersConfig.SHOW_IF_HOLDING_WRONG_TOOL.get()) {
                 return;
             }
         }
+
+        List<Tier> tiers = buildRuntimeTierList();
+
+        if (tiers.isEmpty()) {
+            return;
+        }
+
+        Tier required = findRequiredTier(state, tiers);
+
+        if (required == null) {
+            return;
+        }
+
+        MutableComponent text = Component.empty()
+                .append(Component.literal("Required: ").withStyle(ChatFormatting.GRAY));
+
+        String label = required.label();
+
+        if (!label.isBlank()) {
+            text.append(Component.literal(label).withStyle(style -> style.withColor(required.color())));
+        }
+
+        List<IElement> line = new ArrayList<>();
+
+        if (SilentGearJadeTiersConfig.SHOW_CROSSED_PICKAXE_ICON.get()) {
+            line.add(
+                    new TierPickaxeElement(
+                            required.color(),
+                            !heldCanMine
+                    ).message(null)
+            );
+        }
+
+        line.add(IElementHelper.get().text(text).message(null));
+        tooltip.add(line);
+    }
+
+    private static Tier findRequiredTier(BlockState state, List<Tier> tiers) {
 
         List<Tier> tiers = buildRuntimeTierList();
 
@@ -179,10 +216,6 @@ public enum SilentGearTierComponentProvider implements IBlockComponentProvider {
     }
 
     ItemStack held = accessor.getPlayer().getMainHandItem();
-
-    if (held.isEmpty()) {
-        return false;
-    }
 
     return jadeStyleCanHarvest(held, state).allowed();
 }
